@@ -220,7 +220,6 @@
 
     <!-- 操作按钮区 -->
     <div class="action-group">
-        <button class="btn" id="musicBtn" onclick="toggleMusic()">🎵 播放音乐</button>
         <button class="btn" onclick="showQRModal()">📱 手机扫码</button>
         <button class="btn primary" onclick="document.getElementById('imageUpload').click()">
             📷 上传照片
@@ -248,11 +247,6 @@
     </div>
 
     <div id="canvas-container"></div>
-
-    <audio id="bgm" loop>
-    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3" type="audio/mpeg">
-    您的浏览器不支持音频播放。
-    </audio>
 
     <!-- 引入必要的库 -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -438,26 +432,6 @@
                 }
             });
         }
-
-        let isPlaying = false;
-        const bgm = document.getElementById('bgm');
-        const musicBtn = document.getElementById('musicBtn');
-
-        window.toggleMusic = function() {
-            if (isPlaying) {
-                bgm.pause();
-                musicBtn.innerText = "🎵 播放音乐";
-                musicBtn.style.background = "rgba(15, 15, 20, 0.7)";
-            } else {
-                bgm.play().catch(err => {
-                    console.log("音频播放被拦截，需要用户点击页面");
-            });
-            }
-            musicBtn.innerText = "⏸️ 暂停音乐";
-            musicBtn.style.background = "rgba(255, 170, 0, 0.3)";
-        }
-        isPlaying = !isPlaying;
-};
 
         function createRings() {
             function createRingObj(innerR, outerR, count, colorHex) {
