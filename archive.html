@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archive - 图像档案库</title>
+    <style>
+        :root {
+            --accent: #0cf;
+            --bg: #030305;
+            --card-bg: rgba(20, 20, 25, 0.7);
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 顶部导航 */
+        .nav-bar {
+            width: 100%;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        .back-link {
+            text-decoration: none;
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: 0.3s;
+        }
+
+        .back-link:hover { color: var(--accent); }
+
+        /* 主容器 */
+        .main-container {
+            max-width: 1000px;
+            width: 90%;
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        h1 {
+            font-weight: 200;
+            letter-spacing: 4px;
+            margin-bottom: 40px;
+            text-transform: uppercase;
+        }
+
+        /* 二维码区域 */
+        .sync-section {
+            background: var(--card-bg);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 30px;
+            margin-bottom: 50px;
+            display: inline-block;
+        }
+
+        #qrcode {
+            width: 160px;
+            height: 160px;
+            background: white;
+            padding: 10px;
+            border-radius: 12px;
+            margin: 0 auto 15px;
+        }
+
+        .sync-text {
+            font-size: 13px;
+            opacity: 0.6;
+            letter-spacing: 1px;
+        }
+
+        /* 槽位区域 */
+        .slots-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 60px;
+        }
+
+        .slot {
+            background: var(--card-bg);
+            border: 1px dashed var(--border);
+            border-radius: 20px;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            transition: 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+        }
+
+        .slot.filled {
+            border-style: solid;
+            border-color: rgba(0, 204, 255, 0.3);
+        }
+
+        .slot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .slot-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 8px;
+            border-radius: 4px;
+            opacity: 0.5;
+        }
+
+        .upload-btn {
+            background: var(--accent);
+            color: black;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: 0.3s;
+            box-shadow: 0 0 20px rgba(0, 204, 255, 0.4);
+        }
+
+        .upload-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 204, 255, 0.6);
+        }
+
+        /* 隐藏的文件输入 */
+        #file-input { display: none; }
+
+        /* 遮罩/模态框 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: #15151a;
+            border: 1px solid var(--border);
+            padding: 35px;
+            border-radius: 24px;
+            max-width: 400px;
+            width: 85%;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .modal h3 { margin-top: 0; color: #ff4d4d; }
+        .modal p { opacity: 0.7; font-size: 14px; line-height: 1.6; margin-bottom: 25px; }
+        
+        .modal-btns {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn-cancel {
+            background: transparent;
+            color: white;
+            border: 1px solid var(--border);
+            padding: 10px 25px;
+            border-radius: 50px;
+            cursor: pointer;
+        }
+
+        .btn-confirm {
+            background: #ff4d4d;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 50px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="nav-bar">
+        <a href="index.html" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            返回门户
+        </a>
+    </nav>
+
+    <div class="main-container">
+        <h1>Image Archive</h1>
+
+        <div class="sync-section">
+            <div id="qrcode"></div>
+            <div class="sync-text">扫描二维码从手机上传</div>
+        </div>
+
+        <div class="slots-container">
+            <div class="slot" id="slot-0"><span class="sync-text">槽位 1 空置</span><span class="slot-label">SLOT_01</span></div>
+            <div class="slot" id="slot-1"><span class="sync-text">槽位 2 空置</span><span class="slot-label">SLOT_02</span></div>
+            <div class="slot" id="slot-2"><span class="sync-text">槽位 3 空置</span><span class="slot-label">SLOT_03</span></div>
+        </div>
+
+        <button class="upload-btn" onclick="handleUploadClick()">上传新图像</button>
+        <input type="file" id="file-input" accept="image/*" onchange="processFile(this.files[0])">
+    </div>
+
+    <!-- 自定义 Alert 模态框 -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal">
+            <h3>槽位已满</h3>
+            <p>档案库槽位已满，若继续上传将覆盖最早上传的图像。是否继续？</p>
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="closeModal()">取消 Cancel</button>
+                <button class="btn-confirm" onclick="triggerFileInput()">上传 Upload</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 二维码生成库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <script>
+        let uploadedImages = JSON.parse(localStorage.getItem('archive_images') || '[]');
+        let nextOverwriteIndex = 0; // 用于满员时覆盖的索引
+
+        // 初始化
+        window.onload = () => {
+            generateQRCode();
+            renderSlots();
+        };
+
+        function generateQRCode() {
+            new QRCode(document.getElementById("qrcode"), {
+                text: window.location.href,
+                width: 160,
+                height: 160,
+                colorDark : "#000000",
+                colorLight : "#ffffff"
+            });
+        }
+
+        function renderSlots() {
+            for (let i = 0; i < 3; i++) {
+                const slot = document.getElementById(`slot-${i}`);
+                if (uploadedImages[i]) {
+                    slot.innerHTML = `<img src="${uploadedImages[i]}"><span class="slot-label">SLOT_0${i+1}</span>`;
+                    slot.classList.add('filled');
+                } else {
+                    slot.innerHTML = `<span class="sync-text">槽位 ${i+1} 空置</span><span class="slot-label">SLOT_0${i+1}</span>`;
+                    slot.classList.remove('filled');
+                }
+            }
+        }
+
+        function handleUploadClick() {
+            if (uploadedImages.length >= 3) {
+                document.getElementById('confirm-modal').style.display = 'flex';
+            } else {
+                triggerFileInput();
+            }
+        }
+
+        function triggerFileInput() {
+            closeModal();
+            document.getElementById('file-input').click();
+        }
+
+        function closeModal() {
+            document.getElementById('confirm-modal').style.display = 'none';
+        }
+
+        function processFile(file) {
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64Data = e.target.result;
+                
+                if (uploadedImages.length < 3) {
+                    uploadedImages.push(base64Data);
+                } else {
+                    // 覆盖逻辑：按顺序循环覆盖
+                    uploadedImages[nextOverwriteIndex] = base64Data;
+                    nextOverwriteIndex = (nextOverwriteIndex + 1) % 3;
+                }
+
+                localStorage.setItem('archive_images', JSON.stringify(uploadedImages));
+                renderSlots();
+            };
+            reader.readAsDataURL(file);
+        }
+    </script>
+</body>
+</html>

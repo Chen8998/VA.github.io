@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus - 跨维度门户</title>
+    <style>
+        /* 引入艺术字体 */
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@200;400&display=swap');
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: #010103; overflow: hidden;
+            font-family: 'Inter', sans-serif; color: white;
+        }
+
+        /* 3D WebGL 背景容器 */
+        #webgl-container { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; 
+        }
+
+        /* UI 交互层 */
+        #content-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            pointer-events: none; /* 穿透点击以保持背景交互 */
+        }
+
+        .header {
+            text-align: center; margin-bottom: 60px; pointer-events: auto;
+        }
+
+        h1 {
+            font-family: 'Cinzel', serif; font-size: clamp(2.5rem, 8vw, 4.5rem);
+            margin: 0; letter-spacing: 20px; font-weight: 400;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+            text-transform: uppercase; opacity: 0.9;
+        }
+
+        .subtitle {
+            font-size: 0.9rem; letter-spacing: 8px; margin-top: 15px;
+            color: #8892b0; text-transform: uppercase; font-weight: 300;
+        }
+
+        /* 门户卡片网格 */
+        .portal-grid {
+            display: flex; gap: 30px; pointer-events: auto;
+            flex-wrap: wrap; justify-content: center; max-width: 1000px; padding: 20px;
+        }
+
+        .portal-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 40px; border-radius: 2px; /* 方正风格更有艺术感 */
+            text-decoration: none; color: white;
+            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative; overflow: hidden;
+            width: 240px; text-align: center;
+        }
+
+        .portal-card:hover {
+            transform: translateY(-15px);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
+        }
+
+        /* 卡片光效旋转动画 */
+        .portal-card::after {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: 0.5s;
+        }
+        .portal-card:hover::after { left: 100%; }
+
+        .card-icon { 
+            font-size: 2.5rem; margin-bottom: 20px; display: block; 
+            filter: drop-shadow(0 0 10px rgba(255,255,255,0.5));
+        }
+
+        .card-title { 
+            font-family: 'Cinzel', serif; font-size: 1.3rem; 
+            letter-spacing: 3px; margin-bottom: 10px; 
+        }
+
+        .card-desc { 
+            font-size: 0.8rem; color: #8892b0; line-height: 1.6; font-weight: 300; 
+        }
+
+        /* 装饰性元素 */
+        .scanline {
+            width: 100%; height: 2px; background: rgba(255,255,255,0.05);
+            position: absolute; top: 0; z-index: 5;
+            animation: scan 8s linear infinite;
+        }
+        @keyframes scan { from { top: 0% } to { top: 100% } }
+
+        @media (max-width: 768px) {
+            h1 { letter-spacing: 10px; }
+            .portal-grid { gap: 20px; }
+            .portal-card { width: 80%; padding: 30px; }
+        }
+
+        /* 右下角二维码触发按钮 */
+        .qr-trigger {
+            position: absolute; bottom: 30px; right: 30px; z-index: 100;
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 12px 20px; border-radius: 50px; cursor: pointer;
+            backdrop-filter: blur(10px); pointer-events: auto;
+            transition: all 0.3s; font-size: 14px; letter-spacing: 1px;
+        }
+        .qr-trigger:hover { background: rgba(255, 255, 255, 0.15); transform: scale(1.05); }
+
+        /* 二维码弹窗 */
+        #qr-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(10px);
+            z-index: 1000; justify-content: center; align-items: center; flex-direction: column;
+        }
+        .qr-container {
+            background: white; padding: 25px; border-radius: 15px; box-shadow: 0 0 50px rgba(0,0,0,1);
+            margin-bottom: 20px;
+        }
+        .qr-close {
+            color: white; border: 1px solid white; background: transparent;
+            padding: 8px 25px; border-radius: 50px; cursor: pointer; transition: 0.3s;
+        }
+        .qr-close:hover { background: white; color: black; }
+
+        #site-loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #010103; z-index: 9999; display: flex;
+            justify-content: center; align-items: center; transition: opacity 1s;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="scanline"></div>
+    <div id="webgl-container"></div>
+
+    <!-- 二维码按钮 -->
+    <button class="qr-trigger" onclick="toggleQR()">📱 手机扫码访问</button>
+
+    <!-- 二维码弹窗 -->
+    <div id="qr-modal">
+        <div class="qr-container" id="qrcode"></div>
+        <p style="margin-bottom: 20px; letter-spacing: 2px; font-weight: 200;">扫描二维码 开启移动交互</p>
+        <button class="qr-close" onclick="toggleQR()">关闭</button>
+    </div>
+
+    <div id="content-layer">
+        <header class="header">
+            <h1>Nexus</h1>
+            <p class="subtitle">Digital Existence Portal</p>
+        </header>
+
+        <nav class="portal-grid">
+            <!-- 链接到你的 holo.html -->
+            <a href="holo.html" class="portal-card">
+                <span class="card-icon">✧</span>
+                <div class="card-title">Hologram</div>
+                <div class="card-desc">全息粒子投影系统<br>通过手势感应实时控制</div>
+            </a>
+
+            <a href="mouse.html" class="portal-card">
+                <span class="card-icon">✦</span>
+                <div class="card-title">Fluid</div>
+                <div class="card-desc">交互艺术<br>感应指尖的律动</div>
+            </a>
+
+            <a href="sound.html" class="portal-card">
+                <span class="card-icon">❂</span>
+                <div class="card-title">Sound</div>
+                <div class="card-desc">音频交互<br>探索声音的视觉表现</div>
+            </a>
+
+            <a href="archive.html" class="portal-card">
+                <span class="card-icon">✹</span>
+                <div class="card-title">Archive</div>
+                <div class="card-desc">数字档案馆<br>上传并探索你的记忆</div>
+            </a>
+
+        </nav>
+    </div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        let scene, camera, renderer, particles, starGroup;
+        let mouseX = 0, mouseY = 0;
+        let targetX = 0, targetY = 0;
+
+        const windowHalfX = window.innerWidth / 2;
+        const windowHalfY = window.innerHeight / 2;
+        
+        window.toggleQR = function() {
+            const modal = document.getElementById('qr-modal');
+            const qrDiv = document.getElementById('qrcode');
+            
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            } else {
+                qrDiv.innerHTML = ""; // 清空旧的
+                new QRCode(qrDiv, {
+                    text: window.location.href, // 自动获取当前 HTTPS 网址
+                    width: 180,
+                    height: 180,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff"
+                });
+                modal.style.display = 'flex';
+            }
+        };
+
+        function init() {
+            const container = document.getElementById('webgl-container');
+
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x010103, 0.0008);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 1, 3000);
+            camera.position.z = 1000;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            starGroup = new THREE.Group();
+            scene.add(starGroup);
+
+            // 创建星云粒子系统
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const colors = [];
+            const tempColor = new THREE.Color();
+
+            for (let i = 0; i < 15000; i++) {
+                // 模拟银河圆盘分布
+                const dist = Math.random() * 1200;
+                const angle = Math.random() * Math.PI * 2;
+                const x = Math.cos(angle) * dist;
+                const y = (Math.random() - 0.5) * 300 * (1 - dist/1200);
+                const z = Math.sin(angle) * dist;
+
+                vertices.push(x, y, z);
+
+                // 蓝紫色调渐变
+                const mixedColor = Math.random();
+                if (mixedColor > 0.5) {
+                    tempColor.setHSL(0.6 + Math.random() * 0.1, 0.7, 0.6); // 蓝色系
+                } else {
+                    tempColor.setHSL(0.8 + Math.random() * 0.1, 0.6, 0.5); // 紫色系
+                }
+                colors.push(tempColor.r, tempColor.g, tempColor.b);
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 1.5,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            particles = new THREE.Points(geometry, material);
+            starGroup.add(particles);
+
+            // 增加一些漂浮的大粒子
+            const driftGeo = new THREE.BufferGeometry();
+            const driftPos = [];
+            for(let i=0; i<200; i++) {
+                driftPos.push((Math.random()-0.5)*2000, (Math.random()-0.5)*2000, (Math.random()-0.5)*2000);
+            }
+            driftGeo.setAttribute('position', new THREE.Float32BufferAttribute(driftPos, 3));
+            const driftMat = new THREE.PointsMaterial({ size: 4, color: 0xffffff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending });
+            starGroup.add(new THREE.Points(driftGeo, driftMat));
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('touchstart', onTouchMove, {passive: false});
+            document.addEventListener('touchmove', onTouchMove, {passive: false});
+            window.addEventListener('resize', onWindowResize);
+
+            animate();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseMove(event) {
+            mouseX = (event.clientX - windowHalfX);
+            mouseY = (event.clientY - windowHalfY);
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length > 0) {
+                mouseX = (event.touches[0].clientX - windowHalfX);
+                mouseY = (event.touches[0].clientY - windowHalfY);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 平滑追踪鼠标
+            targetX += (mouseX - targetX) * 0.03;
+            targetY += (mouseY - targetY) * 0.03;
+
+            // 相机视差
+            camera.position.x = targetX * 0.4;
+            camera.position.y = -targetY * 0.4;
+            camera.lookAt(scene.position);
+
+            // 星系旋转
+            starGroup.rotation.y += 0.0003;
+            starGroup.rotation.z += 0.0001;
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
