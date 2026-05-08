@@ -115,7 +115,24 @@
             width: min(360px, 100%);
             text-align: center;
             box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+            position: relative;
         }
+        .qr-close-x{
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 32px;
+            height: 32px;
+            border-radius: 16px;
+            border: 1px solid rgba(0,0,0,0.08);
+            background: rgba(0,0,0,0.04);
+            color: rgba(0,0,0,0.65);
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 30px;
+            padding: 0;
+        }
+        .qr-close-x:hover{ background: rgba(0,0,0,0.08); color: rgba(0,0,0,0.85); }
         .qr-title{ font-size: 14px; letter-spacing: 1px; margin: 0 0 8px 0; }
         .qr-sub{ font-size: 12px; color: rgba(0,0,0,0.6); line-height: 1.5; margin-bottom: 12px; }
         .qr-warning{
@@ -169,8 +186,9 @@
     </div>
 
     <!-- Scan Upload Modal (added) -->
-    <div class="modal-overlay" id="qrUploadModal">
-        <div class="qr-card">
+    <div class="modal-overlay" id="qrUploadModal" onclick="closeUploadModal()">
+        <div class="qr-card" onclick="event.stopPropagation()">
+            <button class="qr-close-x" onclick="closeUploadModal()" aria-label="关闭">×</button>
             <h3 class="qr-title">扫码上传图片</h3>
             <div class="qr-sub">用手机扫码打开后，从手机本地选择图片上传到当前页面。</div>
             <div id="qrcodeUpload" style="margin: 10px auto 10px auto; display:flex; justify-content:center;"></div>
