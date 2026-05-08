@@ -7,6 +7,37 @@
     <style>
         body { margin: 0; overflow: hidden; background: #050505; font-family: 'Inter', sans-serif; }
         canvas { display: block; }
+
+        /* --- Back to Portal Button --- */
+        .top-right-container {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            z-index: 100;
+        }
+        .back-button {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            letter-spacing: 1px;
+        }
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #fff;
+            transform: translateX(-5px);
+        }
+
         #instructions {
             position: absolute;
             top: 20px;
@@ -48,7 +79,9 @@
         .btn:hover { background: rgba(255, 255, 255, 0.2); border-color: #fff; }
         .btn.active { background: rgba(0, 255, 100, 0.2); border-color: #00ff64; }
 
-        /* Brighter GUI styling */
+        /* Offset the GUI so it doesn't cover the back button */
+        .lil-gui.root { margin-top: 80px !important; }
+
         .lil-gui { 
             --background-color: rgba(255, 255, 255, 0.95) !important;
             --text-color: #111 !important;
@@ -58,6 +91,16 @@
     </style>
 </head>
 <body>
+
+    <div class="top-right-container">
+        <a href="index.html" class="back-button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            <span>返回门户</span>
+        </a>
+    </div>
 
     <div id="instructions">Select Library • Upload Image • Enable Mic</div>
     
@@ -82,7 +125,6 @@
         import * as THREE from 'three';
         import { GUI } from 'lil-gui';
 
-        // --- Global State & Settings ---
         const state = {
             particleSize: 0.035,
             systemScale: 0.04,
@@ -92,7 +134,6 @@
             autoRotate: true,
             tint: '#ffffff',
             panelWidth: 240,
-            // Library of bright images
             library: 'Vibrant Bird',
             presets: {
                 'Vibrant Bird': 'https://images.unsplash.com/photo-1552728089-57bdde30fc3b?w=500&auto=format',
@@ -118,7 +159,6 @@
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             document.body.appendChild(renderer.domElement);
 
-            // Control Panel
             gui = new GUI({ title: 'Visual Settings' });
             gui.width = state.panelWidth;
             
@@ -139,21 +179,18 @@
             animFolder.add(state, 'autoRotate').name('Auto Rotate');
             animFolder.add(state, 'rotationSpeed', 0, 0.01).name('Rotation Speed');
 
-            // Listeners
             document.getElementById('imageLoader').addEventListener('change', handleUpload);
             document.getElementById('micBtn').addEventListener('click', initAudio);
             window.addEventListener('mousemove', onMouseMove);
             window.addEventListener('resize', onResize);
 
-            // Load initial library image
             loadURL(state.presets[state.library]);
             animate();
         }
 
-        // --- Image Handling ---
         function loadURL(url) {
             const img = new Image();
-            img.crossOrigin = "anonymous"; // Necessary for cross-domain images from library
+            img.crossOrigin = "anonymous";
             img.onload = () => createSystem(img);
             img.src = url;
         }
@@ -186,13 +223,12 @@
             for (let y = 0; y < canvas.height; y++) {
                 for (let x = 0; x < canvas.width; x++) {
                     const i = (y * canvas.width + x) * 4;
-                    // Sampling pixel brightness for the Z-axis (3D depth)
                     const brightness = (data[i] + data[i+1] + data[i+2]) / 765;
                     
                     if (data[i + 3] > 128) {
                         const hx = (x - canvas.width / 2) * state.systemScale;
                         const hy = -(y - canvas.height / 2) * state.systemScale;
-                        const hz = brightness * 1.5; // Depth based on brightness
+                        const hz = brightness * 1.5;
 
                         homes.push(hx, hy, hz);
                         positions.push(hx, hy, hz);
@@ -219,7 +255,6 @@
             scene.add(particles);
         }
 
-        // --- Audio & Interaction ---
         async function initAudio() {
             if (isMicEnabled) return;
             try {
@@ -283,7 +318,7 @@
                     posAttr.setXYZ(i, 
                         hx * (1 + expandAmt), 
                         hy * (1 + expandAmt), 
-                        hz + (expandAmt * 2) // Push Z forward on sound
+                        hz + (expandAmt * 2)
                     );
                 }
                 posAttr.needsUpdate = true;
