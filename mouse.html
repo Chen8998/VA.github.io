@@ -7,9 +7,40 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
         canvas { display: block; }
+        
+        /* --- Back to Portal Button Styles --- */
+        .top-right-container {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            z-index: 100;
+        }
+        .back-button {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 13px;
+            text-decoration: none;
+            letter-spacing: 1px;
+        }
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateX(-5px);
+        }
+
+        /* --- UI Layer Styles --- */
         #instructions {
             position: absolute;
-            top: 20px;
+            top: 25px;
             left: 50%;
             transform: translateX(-50%);
             color: rgba(255,255,255,0.5);
@@ -26,6 +57,7 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
+            z-index: 10;
         }
         .library-group {
             display: flex;
@@ -47,9 +79,24 @@
         }
         .btn:hover { background: rgba(255, 255, 255, 0.25); border-color: rgba(255,255,255,0.5); }
         .preset-btn { background: rgba(100, 100, 255, 0.2); }
+
+        /* Push the lil-gui down so it doesn't cover the back button */
+        .lil-gui.root { margin-top: 80px !important; }
     </style>
 </head>
 <body>
+
+    <div class="top-right-container">
+        <nav class="back-nav">
+            <a href="index.html" class="back-button">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>返回门户</span>
+            </a>
+        </nav>
+    </div>
 
     <div id="instructions">HOLD MOUSE TO ASSEMBLE • RELEASE TO SCATTER<br>长按鼠标聚拢 • 松开恢复</div>
     
@@ -83,7 +130,7 @@
             systemScale: 0.035,
             scatterRange: 12,
             rotationSpeed: 0.005,
-            autoRotate: false, // Turned off so only clicking interacts
+            autoRotate: false,
             panelWidth: 180,
             tint: '#ffffff'
         };
@@ -110,14 +157,11 @@
             gui.add(state, 'scatterRange', 2, 30).name('Scatter');
             gui.add(state, 'autoRotate').name('Auto Spin');
 
-            // --- STRICT MOUSE INTERACTION ---
             window.addEventListener('mousedown', () => isPressed = true);
             window.addEventListener('mouseup', () => isPressed = false);
-            // Touch support for mobile clicking
             window.addEventListener('touchstart', (e) => { isPressed = true; }, {passive: true});
             window.addEventListener('touchend', () => isPressed = false);
 
-            // Library Event Listeners
             document.querySelectorAll('.preset-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     loadFromURL(e.target.dataset.url);
@@ -127,7 +171,6 @@
             document.getElementById('imageLoader').addEventListener('change', handleUpload);
             window.addEventListener('resize', onResize);
 
-            // Auto-load first preset to show effect immediately
             loadFromURL(document.querySelector('.preset-btn').dataset.url);
 
             animate();
@@ -135,7 +178,7 @@
 
         function loadFromURL(url) {
             const img = new Image();
-            img.crossOrigin = "Anonymous"; // Essential for external images
+            img.crossOrigin = "Anonymous";
             img.onload = () => createSystem(img);
             img.src = url;
         }
