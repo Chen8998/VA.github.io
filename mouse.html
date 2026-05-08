@@ -14,6 +14,11 @@
             top: 25px;
             right: 25px;
             z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+            pointer-events: auto;
         }
         .back-button {
             display: flex;
@@ -80,8 +85,68 @@
         .btn:hover { background: rgba(255, 255, 255, 0.25); border-color: rgba(255,255,255,0.5); }
         .preset-btn { background: rgba(100, 100, 255, 0.2); }
 
+        /* --- Scan Upload Modal / Mobile Sender Page (added) --- */
+        .modal-overlay{
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(10px);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+        .qr-card{
+            background: rgba(255,255,255,0.95);
+            color: #111;
+            border-radius: 18px;
+            padding: 22px 20px;
+            width: min(360px, 100%);
+            text-align: center;
+            box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+        }
+        .qr-title{ font-size: 14px; letter-spacing: 1px; margin: 0 0 8px 0; }
+        .qr-sub{ font-size: 12px; color: rgba(0,0,0,0.6); line-height: 1.5; margin-bottom: 12px; }
+        .qr-warning{
+            display: none;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #b42318;
+            background: #fee4e2;
+            padding: 8px 10px;
+            border-radius: 10px;
+        }
+        #uploadStatus{ font-size: 12px; color: rgba(0,0,0,0.7); min-height: 16px; }
+        #mobileUploadPage{
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: radial-gradient(circle at top, rgba(100, 100, 255, 0.15), rgba(0,0,0,1) 60%);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+            color: #fff;
+            text-align: center;
+        }
+        #mobileUploadCard{
+            width: min(420px, 100%);
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 18px;
+            padding: 20px;
+            backdrop-filter: blur(14px);
+        }
+        #mobileUploadCard h2{ margin: 0 0 10px 0; font-size: 16px; letter-spacing: 1px; }
+        #mobileUploadHint{ font-size: 12px; color: rgba(255,255,255,0.75); line-height: 1.55; margin-bottom: 14px; }
+        #mobileUploadStatus{ font-size: 12px; margin-top: 12px; color: rgba(255,255,255,0.85); }
+        #mobileImageUpload{ display: none; }
+
         /* Push the lil-gui down so it doesn't cover the back button */
-        .lil-gui.root { margin-top: 80px !important; }
+        .lil-gui.root { margin-top: 130px !important; }
     </style>
 </head>
 <body>
@@ -96,6 +161,30 @@
                 <span>返回首页</span>
             </a>
         </nav>
+        <button class="btn" id="qrUploadBtn" onclick="showUploadQRModal()">扫码上传图片</button>
+    </div>
+
+    <!-- Scan Upload Modal (added) -->
+    <div class="modal-overlay" id="qrUploadModal">
+        <div class="qr-card">
+            <h3 class="qr-title">扫码上传图片</h3>
+            <div class="qr-sub">用手机扫码打开后，从手机本地选择图片上传到当前页面。</div>
+            <div id="qrcodeUpload" style="margin: 10px auto 10px auto; display:flex; justify-content:center;"></div>
+            <div id="uploadStatus">等待手机上传…</div>
+            <div id="uploadWarning" class="qr-warning">⚠️ 需联网才可使用扫码上传（通过公共消息中转服务传输图片）。</div>
+            <button class="btn" style="margin-top: 14px;" onclick="closeUploadModal()">关闭</button>
+        </div>
+    </div>
+
+    <!-- Mobile Sender Page (added) -->
+    <div id="mobileUploadPage">
+        <div id="mobileUploadCard">
+            <h2>上传图片到大屏</h2>
+            <div id="mobileUploadHint">点击下方按钮选择一张手机本地图片，上传完成后大屏会自动更新 3D 粒子模型。</div>
+            <button class="btn" style="width: 100%;" onclick="document.getElementById('mobileImageUpload').click()">选择图片并上传</button>
+            <input type="file" id="mobileImageUpload" accept="image/*">
+            <div id="mobileUploadStatus">等待选择图片…</div>
+        </div>
     </div>
 
     <div id="instructions">HOLD MOUSE TO ASSEMBLE • RELEASE TO SCATTER<br>长按鼠标聚拢 • 松开恢复</div>
@@ -112,6 +201,9 @@
         </label>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
     <script type="importmap">
         {
             "imports": {
@@ -124,6 +216,208 @@
     <script type="module">
         import * as THREE from 'three';
         import { GUI } from 'lil-gui';
+
+        // ==============================
+        // 扫码上传图片（added；复用现有 createSystem/img 逻辑，不改动模型生成方式）
+        // ==============================
+        const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+        const MQTT_TOPIC_PREFIX = 'solo-holo-upload/v1/';
+        const UPLOAD_CHUNK_SIZE = 45000;
+        let uploadReceiver = null;
+
+        function genSessionId() {
+            const bytes = new Uint8Array(12);
+            crypto.getRandomValues(bytes);
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function buildUploadUrl(sessionId) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('uploadSession', sessionId);
+            url.searchParams.set('role', 'sender');
+            return url.toString();
+        }
+
+        function setUploadStatus(text) {
+            const el = document.getElementById('uploadStatus');
+            if (el) el.innerText = text;
+        }
+
+        window.closeUploadModal = function() {
+            document.getElementById('qrUploadModal').style.display = 'none';
+        };
+
+        window.showUploadQRModal = function() {
+            const modal = document.getElementById('qrUploadModal');
+            const q = document.getElementById('qrcodeUpload');
+            q.innerHTML = '';
+            setUploadStatus('等待手机上传…');
+            document.getElementById('uploadWarning').style.display = 'none';
+
+            const sessionId = genSessionId();
+            const url = buildUploadUrl(sessionId);
+            new QRCode(q, { text: url, width: 180, height: 180, colorDark: "#000", colorLight: "#fff" });
+            modal.style.display = 'flex';
+
+            startUploadReceiver(sessionId).catch((err) => {
+                console.error(err);
+                setUploadStatus('启动接收失败，请检查网络。');
+                document.getElementById('uploadWarning').style.display = 'block';
+            });
+        };
+
+        async function connectMqttClient(clientId) {
+            if (!window.mqtt || !window.mqtt.connect) throw new Error('mqtt 库未加载');
+            const client = window.mqtt.connect(MQTT_BROKER_URL, {
+                clientId,
+                clean: true,
+                reconnectPeriod: 1500,
+                connectTimeout: 8000
+            });
+            await new Promise((resolve, reject) => {
+                const onConnect = () => { cleanup(); resolve(); };
+                const onError = (e) => { cleanup(); reject(e); };
+                const cleanup = () => {
+                    client.off('connect', onConnect);
+                    client.off('error', onError);
+                };
+                client.on('connect', onConnect);
+                client.on('error', onError);
+            });
+            return client;
+        }
+
+        async function mqttPublish(client, topic, payload) {
+            return new Promise((resolve, reject) => {
+                client.publish(topic, payload, { qos: 0 }, (err) => err ? reject(err) : resolve());
+            });
+        }
+
+        async function startUploadReceiver(sessionId) {
+            if (uploadReceiver && uploadReceiver.client) {
+                try { uploadReceiver.client.end(true); } catch (e) {}
+            }
+
+            setUploadStatus('正在建立连接…');
+            const topic = MQTT_TOPIC_PREFIX + sessionId;
+            const client = await connectMqttClient('mouse-receiver-' + genSessionId());
+
+            uploadReceiver = { sessionId, topic, client, meta: null, chunks: null, received: 0 };
+            client.subscribe(topic, { qos: 0 });
+
+            client.on('message', async (_topic, message) => {
+                if (_topic !== topic) return;
+                let data;
+                try { data = JSON.parse(message.toString()); } catch (e) { return; }
+                if (!data || !data.t) return;
+
+                if (data.t === 'meta') {
+                    uploadReceiver.meta = data;
+                    uploadReceiver.chunks = new Array(data.totalChunks || 0);
+                    uploadReceiver.received = 0;
+                    setUploadStatus(`已连接，开始接收：${data.name || '图片'}…`);
+                    return;
+                }
+
+                if (data.t === 'chunk' && uploadReceiver.chunks) {
+                    const idx = data.idx;
+                    if (typeof idx !== 'number') return;
+                    if (!uploadReceiver.chunks[idx]) {
+                        uploadReceiver.chunks[idx] = data.data || '';
+                        uploadReceiver.received += 1;
+                        const total = uploadReceiver.chunks.length || 1;
+                        const pct = Math.floor((uploadReceiver.received / total) * 100);
+                        setUploadStatus(`接收中… ${pct}%`);
+                    }
+
+                    if (uploadReceiver.received === uploadReceiver.chunks.length) {
+                        const dataUrl = uploadReceiver.chunks.join('');
+                        setUploadStatus('接收完成，正在生成 3D 粒子模型…');
+                        await handleIncomingImageDataUrl(dataUrl);
+                        setUploadStatus('完成 ✅');
+                        try { client.unsubscribe(topic); client.end(true); } catch (e) {}
+                    }
+                }
+            });
+
+            setUploadStatus('等待手机上传…');
+        }
+
+        async function handleIncomingImageDataUrl(dataUrl) {
+            const img = new Image();
+            await new Promise((resolve) => {
+                img.onload = () => resolve();
+                img.src = dataUrl;
+            });
+            createSystem(img);
+        }
+
+        function renderMobileSenderUI(sessionId) {
+            // 仅在手机端上传页面：隐藏原 UI
+            const top = document.querySelector('.top-right-container');
+            if (top) top.style.display = 'none';
+            const inst = document.getElementById('instructions');
+            if (inst) inst.style.display = 'none';
+            const ui = document.getElementById('ui-layer');
+            if (ui) ui.style.display = 'none';
+
+            const page = document.getElementById('mobileUploadPage');
+            page.style.display = 'flex';
+
+            const status = document.getElementById('mobileUploadStatus');
+            const input = document.getElementById('mobileImageUpload');
+
+            input.addEventListener('change', async (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+
+                status.innerText = '读取图片…';
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => resolve(evt.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                status.innerText = '连接中…';
+                const topic = MQTT_TOPIC_PREFIX + sessionId;
+                let client;
+                try {
+                    client = await connectMqttClient('mouse-sender-' + genSessionId());
+                } catch (err) {
+                    console.error(err);
+                    status.innerText = '连接失败，请检查网络后重试。';
+                    return;
+                }
+
+                try {
+                    const totalChunks = Math.ceil(dataUrl.length / UPLOAD_CHUNK_SIZE);
+                    await mqttPublish(client, topic, JSON.stringify({
+                        t: 'meta',
+                        name: file.name,
+                        size: file.size,
+                        mime: file.type,
+                        totalChunks
+                    }));
+
+                    status.innerText = '上传中… 0%';
+                    for (let i = 0; i < totalChunks; i++) {
+                        const chunk = dataUrl.slice(i * UPLOAD_CHUNK_SIZE, (i + 1) * UPLOAD_CHUNK_SIZE);
+                        await mqttPublish(client, topic, JSON.stringify({ t: 'chunk', idx: i, data: chunk }));
+                        const pct = Math.floor(((i + 1) / totalChunks) * 100);
+                        status.innerText = `上传中… ${pct}%`;
+                        await new Promise(r => setTimeout(r, 5));
+                    }
+
+                    status.innerText = '上传完成 ✅ 你可以返回大屏查看效果。';
+                    try { client.end(true); } catch (e) {}
+                } catch (err) {
+                    console.error(err);
+                    status.innerText = '上传失败，请重试。';
+                    try { client.end(true); } catch (e) {}
+                }
+            });
+        }
 
         const state = {
             particleSize: 0.025,
@@ -138,7 +432,14 @@
         let scene, camera, renderer, particles, geometry, material, gui;
         let isPressed = false;
 
-        init();
+        // 若扫码链接带 role=sender，则显示手机端上传页；否则按原逻辑初始化
+        (() => {
+            const params = new URLSearchParams(window.location.search);
+            const sessionId = params.get('uploadSession');
+            const role = params.get('role');
+            if (sessionId && role === 'sender') renderMobileSenderUI(sessionId);
+            else init();
+        })();
 
         function init() {
             scene = new THREE.Scene();
