@@ -240,7 +240,8 @@
         // ==============================
         const MQTT_BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
         const MQTT_TOPIC_PREFIX = 'solo-holo-upload/v1/';
-        const UPLOAD_CHUNK_SIZE = 45000;
+        // base64 分片大小：过大更易在移动网络下丢包/阻塞，导致接收端卡在 79% 等进度
+        const UPLOAD_CHUNK_SIZE = 18000;
         let uploadReceiver = null;
 
         function genSessionId() {
@@ -263,6 +264,11 @@
 
         window.closeUploadModal = function() {
             document.getElementById('qrUploadModal').style.display = 'none';
+            // 关闭弹窗时停止接收会话，避免后台占用连接与误收消息
+            if (uploadReceiver && uploadReceiver.client) {
+                try { uploadReceiver.client.end(true); } catch (e) {}
+            }
+            uploadReceiver = null;
         };
 
         window.showUploadQRModal = function() {
@@ -307,7 +313,8 @@
 
         async function mqttPublish(client, topic, payload) {
             return new Promise((resolve, reject) => {
-                client.publish(topic, payload, { qos: 0 }, (err) => err ? reject(err) : resolve());
+                // QoS 1 提升可靠性，避免分片丢失导致进度卡住
+                client.publish(topic, payload, { qos: 1 }, (err) => err ? reject(err) : resolve());
             });
         }
 
@@ -320,8 +327,8 @@
             const topic = MQTT_TOPIC_PREFIX + sessionId;
             const client = await connectMqttClient('mouse-receiver-' + genSessionId());
 
-            uploadReceiver = { sessionId, topic, client, meta: null, chunks: null, received: 0 };
-            client.subscribe(topic, { qos: 0 });
+            uploadReceiver = { sessionId, topic, client, meta: null, chunks: null, received: 0, lastMessageAt: 0 };
+            client.subscribe(topic, { qos: 1 });
 
             client.on('message', async (_topic, message) => {
                 if (_topic !== topic) return;
@@ -330,14 +337,31 @@
                 if (!data || !data.t) return;
 
                 if (data.t === 'meta') {
+                    uploadReceiver.lastMessageAt = Date.now();
                     uploadReceiver.meta = data;
                     uploadReceiver.chunks = new Array(data.totalChunks || 0);
                     uploadReceiver.received = 0;
                     setUploadStatus(`已连接，开始接收：${data.name || '图片'}…`);
+
+                    // 超时保护：长时间未收齐分片则提示重试，避免一直卡在某个百分比
+                    const timeoutMs = 20000;
+                    const mySessionId = uploadReceiver.sessionId;
+                    setTimeout(() => {
+                        if (!uploadReceiver || uploadReceiver.sessionId !== mySessionId) return;
+                        if (!uploadReceiver.chunks || uploadReceiver.received === uploadReceiver.chunks.length) return;
+                        const idle = Date.now() - (uploadReceiver.lastMessageAt || 0);
+                        if (idle >= timeoutMs) {
+                            setUploadStatus('接收超时，请在手机端重新上传。');
+                            uploadReceiver.meta = null;
+                            uploadReceiver.chunks = null;
+                            uploadReceiver.received = 0;
+                        }
+                    }, timeoutMs + 200);
                     return;
                 }
 
                 if (data.t === 'chunk' && uploadReceiver.chunks) {
+                    uploadReceiver.lastMessageAt = Date.now();
                     const idx = data.idx;
                     if (typeof idx !== 'number') return;
                     if (!uploadReceiver.chunks[idx]) {
@@ -352,8 +376,11 @@
                         const dataUrl = uploadReceiver.chunks.join('');
                         setUploadStatus('接收完成，正在生成 3D 粒子模型…');
                         await handleIncomingImageDataUrl(dataUrl);
-                        setUploadStatus('完成 ✅');
-                        try { client.unsubscribe(topic); client.end(true); } catch (e) {}
+                        // 不在此处断开连接：允许同一次扫码会话连续上传多张图片
+                        setUploadStatus('完成 ✅（可继续上传）');
+                        uploadReceiver.meta = null;
+                        uploadReceiver.chunks = null;
+                        uploadReceiver.received = 0;
                     }
                 }
             });
@@ -428,11 +455,18 @@
                     }
 
                     status.innerText = '上传完成 ✅ 你可以返回大屏查看效果。';
-                    try { client.end(true); } catch (e) {}
+                    try {
+                        // QoS1 下 publish 回调已拿到 PUBACK；弱网下给一点缓冲，避免最后分片未送达
+                        await new Promise(r => setTimeout(r, 200));
+                        client.end(false);
+                    } catch (e) {}
                 } catch (err) {
                     console.error(err);
                     status.innerText = '上传失败，请重试。';
-                    try { client.end(true); } catch (e) {}
+                    try { client.end(false); } catch (e) {}
+                } finally {
+                    // 允许用户连续选择同一文件也能触发再次上传
+                    input.value = '';
                 }
             });
         }
